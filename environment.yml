@@ -1,0 +1,25 @@
+name: mercure-monaisegment
+channels:
+  - conda-forge
+dependencies:
+  - python=3.9
+  - pydicom
+  - pytorch
+  - torchvision
+  - jupyterlab
+  - cudatoolkit=11.1
+  - SimpleITK
+  - libjpeg-turbo
+  - pip
+  - pip :
+    - gdown==4.6.4
+    - highdicom==0.20.0
+    - kornia==0.6.10
+    - monai==1.1.0
+    - monai-deploy-app-sdk==0.5.0
+    - nibabel==4.0.2
+    - opencv-python==4.7.0.72
+    - pillow==9.4.0
+    - pillow-jpls==1.2.0
+    - tqdm==4.65.0
+    - typeguard==2.13.3
