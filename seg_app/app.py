@@ -1,4 +1,3 @@
-
 # Copyright 2021-2022 MONAI Consortium
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -11,7 +10,32 @@
 # limitations under the License.
 
 import logging
+import monai
+import torch
+import numpy
+import nibabel
+import pydicom
+import highdicom
+import SimpleITK
+import typeguard
+import monai.deploy
 
+import monai.deploy.core as md
+from monai.deploy.core import ExecutionContext, Image, InputContext, IOType, Operator, OutputContext
+from monai.deploy.operators.monai_seg_inference_operator import InMemImageReader, MonaiSegInferenceOperator
+from monai.transforms import (
+    Activationsd,
+    AsDiscreted,
+    Compose,
+    EnsureChannelFirstd,
+    EnsureTyped,
+    Invertd,
+    LoadImaged,
+    Orientationd,
+    SaveImaged,
+    ScaleIntensityRanged,
+    Spacingd,
+)
 # Required for setting SegmentDescription attributes. Direct import as this is not part of App SDK package.
 from pydicom.sr.codedict import codes
 
@@ -23,6 +47,8 @@ from monai.deploy.operators.dicom_seg_writer_operator import DICOMSegmentationWr
 from monai.deploy.operators.dicom_series_selector_operator import DICOMSeriesSelectorOperator
 from monai.deploy.operators.dicom_series_to_volume_operator import DICOMSeriesToVolumeOperator
 from monai.deploy.operators.monai_bundle_inference_operator import IOMapping, MonaiBundleInferenceOperator
+
+from dicom_rgb_mask_writer_operator import DICOMRGBMaskWriterOperator
 
 @resource(cpu=1, gpu=1, memory="7Gi")
 
@@ -44,9 +70,12 @@ class AISegApp(Application):
         logging.info(f"Begin {self.compose.__name__}")
 
         # Create the custom operator(s) as well as SDK built-in operator(s).
+        custom_tags = {"SeriesDescription": "AI generated Seg, not for clinical use."}
+        
         study_loader_op = DICOMDataLoaderOperator()
         series_selector_op = DICOMSeriesSelectorOperator()
         series_to_vol_op = DICOMSeriesToVolumeOperator()
+        dicom_rgb_mask_writer = DICOMRGBMaskWriterOperator(custom_tags=custom_tags)
 
         # Create the inference operator that supports MONAI Bundle and automates the inference.
         # The IOMapping labels match the input and prediction keys in the pre and post processing.
@@ -98,7 +127,10 @@ class AISegApp(Application):
         # uncommenting the following couple lines.
         # stl_conversion_op = STLConversionOperator(output_file="stl/spleen.stl")
         # self.add_flow(bundle_spleen_seg_op, stl_conversion_op, {"pred": "image"})
-
+        self.add_flow(
+            series_selector_op, dicom_rgb_mask_writer, {"study_selected_series_list": "study_selected_series_list"}
+        )
+        self.add_flow(bundle_seg_op, dicom_rgb_mask_writer, {"pred": "seg_image"})
         logging.info(f"End {self.compose.__name__}")
 
 

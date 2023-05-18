@@ -2,24 +2,23 @@ name: mercure-monaisegment
 channels:
   - conda-forge
 dependencies:
-  - python=3.9
-  - pydicom
+  - python=3.7
+  - libpng
+  - libjpeg-turbo
   - pytorch
   - torchvision
   - jupyterlab
   - cudatoolkit=11.1
-  - SimpleITK
-  - libjpeg-turbo
+  - matplotlib
   - pip
   - pip :
-    - gdown==4.6.4
-    - highdicom==0.20.0
-    - kornia==0.6.10
-    - monai==1.1.0
-    - monai-deploy-app-sdk==0.5.0
-    - nibabel==4.0.2
-    - opencv-python==4.7.0.72
-    - pillow==9.4.0
-    - pillow-jpls==1.2.0
-    - tqdm==4.65.0
-    - typeguard==2.13.3
+    - monai
+    - torch>=1.10.2
+    - numpy>=1.21
+    - nibabel>=3.2.1
+    - pydicom>=1.4.2
+    - highdicom>=0.18.2
+    - SimpleITK>=2.0.0
+    - typeguard~=2.12.1 # Work around MONAI requirements.txt bug that picks up the wrong typeguard version
+    - scikit-learn 
+    - monai-deploy-app-sdk
