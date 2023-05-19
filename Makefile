@@ -1,2 +1,2 @@
 build:
-	docker build . -t jmsocallaghan/mercure-monaisegment:latest
+	docker build . -t mercureimaging/mercure-monaisegment:latest
