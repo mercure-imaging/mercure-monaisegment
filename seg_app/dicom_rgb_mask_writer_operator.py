@@ -1,4 +1,6 @@
-# This code is adapted from the MONAI deploy dicom_seg_writer_operator.py code :
+# This code is adapted from the MONAI deploy dicom_seg_writer_operator.py code 
+# distributed under the Apache 2.0 license as described below :
+
 # Copyright 2021 MONAI Consortium
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -9,6 +11,9 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+
+# The code has been modified to output an RGB DICOM file to visualize segmentations 
+# rather than DICOM SEG format in the original operator.
 
 import datetime
 import logging
@@ -38,6 +43,7 @@ Dataset, _ = optional_import("pydicom.dataset", name="Dataset")
 FileDataset, _ = optional_import("pydicom.dataset", name="FileDataset")
 sitk, _ = optional_import("SimpleITK")
 codes, _ = optional_import("pydicom.sr.codedict", name="codes")
+
 if TYPE_CHECKING:
     import highdicom as hd
     from pydicom.sr.coding import Code
@@ -74,22 +80,17 @@ class DICOMRGBMaskWriterOperator(Operator):
         **kwargs,
     ):
         super().__init__(*args, **kwargs)
-        """Instantiates the DICOM Seg Writer instance with optional list of segment label strings.
+        """Instantiates the DICOM RGB Mask Writer instance with optional list of segment label strings.
 
-        Each unique, non-zero integer value in the segmentation image represents a segment that must be
-        described by an item of the segment descriptions list with the corresponding segment number.
-        Items in the list must be arranged starting at segment number 1 and increasing by 1.
+        Each unique, non-zero integer value in the segmentation image represents a segment. A colormap is
+        created and each integer will be assigned a different color in the mask. 
 
         For example, in the CT Spleen Segmentation application, the whole image background has a value
-        of 0, and the Spleen segment of value 1. This then only requires the caller to pass in a list
-        containing a segment description, which is used as label for the Spleen in the DICOM Seg instance.
+        of 0, and the Spleen segment of value 1. This then only requires a single color from the colormap.
 
-        Note: this interface is subject to change. It is planned that a new object will encapsulate the
-        segment label information, including label value, name, description etc.
+        Note: For a large number of labels the colormap settings may need to be modified.
 
         Args:
-            segment_descriptions: List[SegmentDescription]
-                Object encapsulating the description of each segment present in the segmentation.
             custom_tags: Optional[Dict[str, str]], optional
                 Dictionary for setting custom DICOM tags using Keywords and str values only
             omit_empty_frames: bool, optional
@@ -164,16 +165,14 @@ class DICOMRGBMaskWriterOperator(Operator):
 
     def create_dicom_rgb(self, image: np.ndarray, dicom_series: DICOMSeries, output_dir: Path):
         
-        #generate segmentation mask colourmap
+        #generate segmentation mask colormap
         new_prism= mpl.colormaps['prism']
-        newcolors = new_prism(np.linspace(0, 1, 80))
+        newcolors = new_prism(np.linspace(0, 1, 80)) # set to 80 colors
         black = np.array([0, 0, 0, 1])
         newcolors[0, :] = black
         newcmp = ListedColormap(newcolors)
         cm.register_cmap('newcmp',newcmp)
         cm.get_cmap('newcmp')
-        
-        
         
         
         
@@ -184,15 +183,11 @@ class DICOMRGBMaskWriterOperator(Operator):
                 raise ValueError("output_dir {output_dir} does not exist and failed to be created.") from None
         
 
-       
         
         slices = dicom_series.get_sop_instances()
         metadata = slices[0].get_native_sop_instance()
         self.sop_class_uid = metadata.SOPClassUID
         self.modality_type = metadata.Modality
-        
-       
-
         ds = write_common_modules(
             dicom_series, self.copy_tags, self.modality_type, self.sop_class_uid , self.model_info, self.equipment_info
         )
@@ -201,6 +196,7 @@ class DICOMRGBMaskWriterOperator(Operator):
         vol_data = np.stack([s.get_pixel_array() for s in slices], axis=0)
         vol_data = vol_data.astype(np.float32)
         
+        # DICOM series setting
         series_UID= generate_uid()
         series_number=random_with_n_digits(4)
 
@@ -213,6 +209,7 @@ class DICOMRGBMaskWriterOperator(Operator):
             seg_img = image[i,:,:]
 
             dcm = ds.copy()
+
             # Normalize the background (input) image
             background = 255 * ( 1.0 / raw_img.max() * (raw_img - raw_img.min()) )
             background = background.astype(np.ubyte)
@@ -222,30 +219,25 @@ class DICOMRGBMaskWriterOperator(Operator):
             mask_image = PIL_Image.fromarray(np.uint8(newcmp(seg_array)*255)).convert("RGB")
         
 
-            # # Blend the two images
+            # Blend the two images
             final_image = PIL_Image.blend(mask_image, background_image, 0.75)
             final_array = np.array(final_image).astype(np.uint8) 
-            #out_image = sitk.GetImageFromArray(final_array,isVector=True)
+        
             
-           # rest window settings
+            #calc window settings for DICOM display
             window_min = np.amin(final_array)
             window_max =np.amax(final_array)
             window_middle = (window_max + window_min) / 2
             window_width = window_max - window_min
                 
-            
+            # Write the final image back to a new DICOM (color) image 
             dcm.WindowCenter=f"{window_middle:.2f}" 
             dcm.WindowWidth=f"{window_width:.2f}"
-
-           
             dcm.PixelSpacing= slices[i].get_native_sop_instance().PixelSpacing
-            dcm.InstanceNumber = slices[i].get_native_sop_instance().InstanceNumber
-            # Write the final image back to a new DICOM (color) image 
-                    
+            dcm.InstanceNumber = slices[i].get_native_sop_instance().InstanceNumber      
             dcm.SeriesInstanceUID = series_UID
             dcm.SeriesNumber = series_number
             dcm.SOPInstanceUID =seg_sop_instance_uid
-           #dcm.InstanceNumber = str(i) # might need to fix
             dcm.file_meta.TransferSyntaxUID = pydicom.uid.ExplicitVRLittleEndian
             dcm.Rows = final_image.height
             dcm.Columns = final_image.width
@@ -257,13 +249,10 @@ class DICOMRGBMaskWriterOperator(Operator):
             dcm.add_new(0x00280006, 'US', 0)
             dcm.is_little_endian = True
             dcm.fix_meta_info() 
-
             dcm.PixelData = final_array.tobytes()
-            
             dcm.ImageType = "DERIVED\\SECONDARY"
             
-            # Instance file name is the same as the new SOP instance UID
-            #dcm.save_as(output_path)
+            # Instance file name is the same as the new SOP instance UID with '_RGB' suffix
             save_dcm_file(dcm,output_path)
             try:
                 # Test reading back
@@ -331,52 +320,42 @@ def random_with_n_digits(n):
     return randint(range_start, range_end)
 
 
-# def test():
-#     from monai.deploy.operators.dicom_data_loader_operator import DICOMDataLoaderOperator
-#     from monai.deploy.operators.dicom_series_selector_operator import DICOMSeriesSelectorOperator
-#     from monai.deploy.operators.dicom_series_to_volume_operator import DICOMSeriesToVolumeOperator
+def test():
+    from monai.deploy.operators.dicom_data_loader_operator import DICOMDataLoaderOperator
+    from monai.deploy.operators.dicom_series_selector_operator import DICOMSeriesSelectorOperator
+    from monai.deploy.operators.dicom_series_to_volume_operator import DICOMSeriesToVolumeOperator
 
-#     current_file_dir = Path(__file__).parent.resolve()
-#     data_path = current_file_dir.joinpath("../../../inputs/spleen_ct_tcia")
-#     out_dir = Path("output_seg_op").absolute()
-#     segment_descriptions = [
-#         SegmentDescription(
-#             segment_label="Spleen",
-#             segmented_property_category=codes.SCT.Organ,
-#             segmented_property_type=codes.SCT.Spleen,
-#             algorithm_name="Test algorithm",
-#             algorithm_family=codes.DCM.ArtificialIntelligence,
-#             algorithm_version="0.0.2",
-#         )
-#     ]
+    current_file_dir = Path(__file__).parent.resolve()
+    data_path = current_file_dir.joinpath("/input_data")
+    out_dir = Path("/output_data").absolute()
 
-#     loader = DICOMDataLoaderOperator()
-#     series_selector = DICOMSeriesSelectorOperator()
-#     dcm_to_volume_op = DICOMSeriesToVolumeOperator()
-#     seg_writer = DICOMSegmentationWriterOperator(segment_descriptions)
+    loader = DICOMDataLoaderOperator()
+    series_selector = DICOMSeriesSelectorOperator()
+    dcm_to_volume_op = DICOMSeriesToVolumeOperator()
+    dicom_rgb_mask_writer = DICOMRGBMaskWriterOperator()
 
-#     # Testing with more granular functions
-#     study_list = loader.load_data_to_studies(data_path.absolute())
-#     series = study_list[0].get_all_series()[0]
+    # Testing with more granular functions
+    study_list = loader.load_data_to_studies(data_path.absolute())
+    series = study_list[0].get_all_series()[0]
 
-#     dcm_to_volume_op.prepare_series(series)
-#     voxels = dcm_to_volume_op.generate_voxel_data(series)
-#     metadata = dcm_to_volume_op.create_metadata(series)
-#     image = dcm_to_volume_op.create_volumetric_image(voxels, metadata)
-#     # Very crude thresholding
-#     image_numpy = (image.asnumpy() > 400).astype(np.uint8)
+    dcm_to_volume_op.prepare_series(series)
+    voxels = dcm_to_volume_op.generate_voxel_data(series)
+    metadata = dcm_to_volume_op.create_metadata(series)
+    image = dcm_to_volume_op.create_volumetric_image(voxels, metadata)
+    # Very crude thresholding
+    image_numpy = (image.asnumpy() > 400).astype(np.uint8)
 
-#     seg_writer.create_dicom_seg(image_numpy, series, out_dir)
+    dicom_rgb_mask_writer.create_dicom_rgb(image_numpy, series, out_dir)
 
-#     # Testing with the main entry functions
-#     study_list = loader.load_data_to_studies(data_path.absolute())
-#     study_selected_series_list = series_selector.filter(None, study_list)
-#     image = dcm_to_volume_op.convert_to_image(study_selected_series_list)
-#     # Very crude thresholding
-#     image_numpy = (image.asnumpy() > 400).astype(np.uint8)
-#     image = Image(image_numpy)
-#     seg_writer.process_images(image, study_selected_series_list, out_dir)
+    # Testing with the main entry functions
+    study_list = loader.load_data_to_studies(data_path.absolute())
+    study_selected_series_list = series_selector.filter(None, study_list)
+    image = dcm_to_volume_op.convert_to_image(study_selected_series_list)
+    # Very crude thresholding
+    image_numpy = (image.asnumpy() > 400).astype(np.uint8)
+    image = Image(image_numpy)
+    dicom_rgb_mask_writer.process_images(image, study_selected_series_list, out_dir)
 
 
-# if __name__ == "__main__":
-#     test()
+if __name__ == "__main__":
+    test()
