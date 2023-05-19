@@ -14,7 +14,7 @@ ADD docker-entrypoint.sh ./
 ADD seg_app ./seg_app
 
 RUN chmod 777 ./docker-entrypoint.sh
-RUN conda create -n env python=3.9
+RUN conda create -n env python=3.7
 RUN echo "source activate env" > ~/.bashrc
 ENV PATH /opt/conda/envs/env/bin:$PATH
 RUN chmod -R 777 /opt/conda/envs
