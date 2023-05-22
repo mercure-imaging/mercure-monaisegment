@@ -102,6 +102,8 @@ class DICOMRGBMaskWriterOperator(Operator):
         self.copy_tags = True
         self.model_info =  ModelInfo()
         self.equipment_info = EquipmentInfo()
+        self.modality_type = "OT" #Other
+        self.sop_class_uid = "1.2.840.10008.5.1.4.1.1.7" #secondary capture
 
     def compute(self, op_input: InputContext, op_output: OutputContext, context: ExecutionContext):
         """Performs computation for this operator and handles I/O.
@@ -185,9 +187,7 @@ class DICOMRGBMaskWriterOperator(Operator):
 
         
         slices = dicom_series.get_sop_instances()
-        metadata = slices[0].get_native_sop_instance()
-        self.sop_class_uid = metadata.SOPClassUID
-        self.modality_type = metadata.Modality
+        
         ds = write_common_modules(
             dicom_series, self.copy_tags, self.modality_type, self.sop_class_uid , self.model_info, self.equipment_info
         )
@@ -199,11 +199,12 @@ class DICOMRGBMaskWriterOperator(Operator):
         # DICOM series setting
         series_UID= generate_uid()
         series_number=random_with_n_digits(4)
+        series_desc =  "RGB_MASK(" + ds.SeriesDescription[:53] + ")"
 
         zdim = image.shape[0]
         for i in range(zdim):
             seg_sop_instance_uid = generate_uid()
-            output_path = output_dir /  f"{seg_sop_instance_uid}_RGB{DICOMRGBMaskWriterOperator.DCM_EXTENSION}"
+            output_path = output_dir /  f"{seg_sop_instance_uid}{DICOMRGBMaskWriterOperator.DCM_EXTENSION}"
 
             raw_img = vol_data[i,:,:]
             seg_img = image[i,:,:]
@@ -250,6 +251,7 @@ class DICOMRGBMaskWriterOperator(Operator):
             dcm.is_little_endian = True
             dcm.fix_meta_info() 
             dcm.PixelData = final_array.tobytes()
+            dcm.SeriesDescription = series_desc
             dcm.ImageType = "DERIVED\\SECONDARY"
             
             # Instance file name is the same as the new SOP instance UID with '_RGB' suffix
