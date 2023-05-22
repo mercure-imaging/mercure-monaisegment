@@ -138,3 +138,4 @@ out/
 *.zip
 /seg_app/__pycache__/
 /model.ts
+!tutorial_mercure-MonaiSegment.ipynb
