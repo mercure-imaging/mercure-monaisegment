@@ -11,12 +11,12 @@ The code can be simply modified to rapidly deploy other segmentation models in t
 
 # Installation
 
-## Add module to existing mercure installation for spleen segmentation in CT images
+## Add module to existing mercure installation
 Follow instructions on [Mercure website](https://mercure-imaging.org) on how to add a new module. Use the docker tag *mercureimaging/mercure-monaisegment*.
 
 <br>
 
-## Install new mercure test environment and deploy MonaiSegment module following tutorial
+## Install new mercure test environment and deploy MonaiSegment module
 Install [virtual box](https://www.virtualbox.org/) and [vagrant](https://www.vagrantup.com/) and follow jupyter notebook tutorial *tutorial_mercure-totalsegmentator.ipynb* (less than 1hr to complete).
 
 <br>
